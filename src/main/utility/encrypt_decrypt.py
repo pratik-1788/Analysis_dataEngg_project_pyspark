@@ -1,31 +1,36 @@
-from Cryptodome.Cipher import AES
-from Cryptodome.Protocol.KDF import PBKDF2
-import base64 ,os,sys
 from Cryptodome.Util.Padding import pad,unpad
+from Cryptodome.Protocol.KDF import PBKDF2
+from Cryptodome.Cipher import AES
 from resources.dev import config
+from src.main.utility import logging_config
+import base64,os,sys
+
 
 try:
     salt=config.salt
-    key = config.key
-    iv = config.iv
+    key=config.key
+    iv=config.iv
 
-    if not(salt,key,iv):
-        raise Exception(F"Error while fetching details for key/iv/salt")
+    if not (salt,key,iv):
+        raise Exception("salt,key,iv are not found")
 except Exception as e:
-    print(f"Error occured. Details : {e}")
+    print(e)
 
-
-def get_privet_key():
+def get_priver_key():
     Salt=salt.encode('utf-8')
-    kdf=PBKDF2(key,salt,dkLen=64,count=10000)
+    kdf=PBKDF2(key,salt,dkLen=64,count=100000)
     return kdf[:32]
 
 def encrypt(raw):
-    raw=pad(raw.encode(),AES.block_size)
-    cipher = AES.new(get_privet_key(),AES.MODE_CBC, iv.encode('utf-8'))
+    logging_config.logger.info('encryption started')
+    raw=pad(raw.encode('utf-8'),AES.block_size)
+    cipher=AES.new(get_priver_key(),AES.MODE_CBC,iv.encode('utf-8'))
     return base64.b64encode(cipher.encrypt(raw))
 
 def decrypt(enc):
-    cipher= AES.new(get_privet_key(),AES.MODE_CBC,iv.encode('utf-8'))
-    return unpad(cipher.decrypt(base64.b64decode(enc)),AES.block_size).decode()
+    logging_config.logger.info('decryption started')
+    enc=base64.b64decode(enc)
+    cipher=AES.new(get_priver_key(),AES.MODE_CBC,iv.encode('utf-8'))
+    return unpad(cipher.decrypt(enc),AES.block_size).decode('utf-8')
 
+print(encrypt('test'))
