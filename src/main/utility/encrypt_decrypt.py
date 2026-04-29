@@ -35,5 +35,3 @@ def decrypt(enc):
     enc=base64.b64decode(enc)
     cipher=AES.new(get_priver_key(),AES.MODE_CBC,iv.encode('utf-8'))
     return unpad(cipher.decrypt(enc),AES.block_size).decode('utf-8')
-
-print(decrypt(config.aws_secret_key))
