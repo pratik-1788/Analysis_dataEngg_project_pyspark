@@ -1,5 +1,9 @@
 import time
+import shutil
+from email import message
+from pyspark.resource import information
 from src.main.download.aws_file_download import *
+from src.main.move.move_files import move_s3_to_s3
 from src.main.read.aws_read import S3Reader
 from src.main.utility.logging_config import logger
 from src.main.utility.my_sql_session import get_mysql_connection
@@ -33,7 +37,7 @@ cursor=conn.cursor()
 if csv_files:
     statement=(f"""
                    select distinct file_name from product_staging_table
-                       where file_name in ({placeholders}) and status='I'
+                       where file_name in ({placeholders}) and status='A'
                    """)
     cursor.execute(statement,csv_files)
     data=cursor.fetchall()
@@ -109,4 +113,65 @@ logger.info('error_files %s',error_files)
 # ******************** Create Spark Session **************************
 
 spark=spark_session()
-logger.info('spark session created %s',spark)
+logger.info('****************************** Spark session created *************************')
+
+logger.info("****************************** Checking schema for data loaded in s3 *************************")
+
+# check the required column in the schema of csv files
+# if not required column keep it in error list
+# else union all the data into one dataframe
+
+correct_files=[]
+
+for data in csv_files:
+
+    data_schema=spark.read.format('csv')\
+                .option('header','True')\
+                .load(data).columns
+    logger.info(f"schema for the {data} is {data_schema} ")
+    logger.info(f"Mandatory columns schema is {config.mandatory_columns} ")
+    missing_columns=set(config.mandatory_columns) - set(data_schema)
+    logger.info(f'Missing columns are {missing_columns} ')
+    if missing_columns:
+        error_files.append(data)
+
+    else:
+        logger.info(f'No missing columns found in {data} ')
+        correct_files.append(data)
+
+logger.info(f'********************* List of correct files *****************\\ {correct_files}')
+logger.info(f'********************** List of error files ********************** \\{error_files} ')
+logger.info('********** Moving error data into error directory ****************')
+
+error_files_local_path=config.error_folder_path_local
+
+if error_files:
+
+    for file in error_files:
+        if os.path.exists(file):
+            file_name = os.path.basename(file)
+            destination_file_path=os.path.join(error_files_local_path,file_name)
+
+            shutil.move(file,destination_file_path)
+            logger.info(f"Moved {file_name} to {destination_file_path}")
+
+
+            source_prefix=config.s3_source_directory
+            destination_prefix=config.s3_error_directory
+
+            message=move_s3_to_s3(s3_client,config.bucket_name,source_prefix,destination_prefix,file_name)
+            logger.info(message)
+
+        else:
+            logger.info(f'{file} does not exist in ')
+else:
+    logger.info(f'No error file are present')
+
+# Additional column needs to be taken care
+# determine extra column
+
+# before running the process
+# stage table needs to be update with status as active or inactive
+
+logger.info('**********updating the product _staging_table that we have started the process')
+

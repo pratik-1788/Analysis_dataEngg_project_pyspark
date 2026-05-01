@@ -9,7 +9,7 @@ s3_client_provider = S3ClientProvider(decrypt(config.aws_access_key), decrypt(co
 s3_client = s3_client_provider.get_s3_client()
 
 
-local_file_path='D:\\Spark_Sales_data\\Sales_data_to_s3'
+local_file_path='D:\\Spark_Sales_data\\Sales_data_to_s3\\'
 
 def upload_to_s3(s3_directory,s3_bucket,local_file_path):
     s3_prefix=f'{s3_directory}'

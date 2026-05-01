@@ -45,4 +45,5 @@ local_directory = "D:\\Spark_Sales_data\\customer_data_mart\\file_from_s3\\"
 customer_data_mart_local_file = "D:\\Spark_Sales_data\\customer_data_mart\\customer_data_mart\\"
 sales_team_data_mart_local_file = "D:\\Spark_Sales_data\\sales_team_data_mart\\"
 sales_team_data_mart_partitioned_local_file = "D:\\Spark_Sales_data\\sales_partition_data\\sales_partition_data\\"
-error_folder_path_local = "D:\\Spark_Sales_data\\error_files\\error_files\\"
+error_folder_path_local = "D:\\Spark_Sales_data\\error_files\\"
+sale_data_local_directory='D:\\Spark_Sales_data\\Sales_data_to_s3\\'
