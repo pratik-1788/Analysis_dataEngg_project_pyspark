@@ -15,15 +15,15 @@ s3_error_directory = "sales_data_error/"
 s3_processed_directory = "sales_data_processed/"
 
 
-# #Database credential
-# # MySQL database connection properties
-# database_name = "youtube_project"
-# url = f"jdbc:mysql://localhost:3306/{database_name}"
-# properties = {
-#     "user": "root",
-#     "password": "password",
-#     "driver": "com.mysql.cj.jdbc.Driver"
-# }
+#Database credential
+# MySQL database connection properties
+database_name = "spark"
+url = f"jdbc:mysql://localhost:3306/{database_name}"
+properties = {
+    "user": "root",
+    "password": "Pratik",
+    "driver": "com.mysql.cj.jdbc.Driver"
+}
 
 # Table name
 customer_table_name = "customer"

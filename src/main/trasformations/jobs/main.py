@@ -1,10 +1,15 @@
+import datetime
 import time
 import shutil
 from email import message
 from pyspark.resource import information
+from pyspark.sql.functions import concat_ws, lit
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType, FloatType
+
 from src.main.download.aws_file_download import *
 from src.main.move.move_files import move_s3_to_s3
 from src.main.read.aws_read import S3Reader
+from src.main.read.database_reader import DatabaseReader
 from src.main.utility.logging_config import logger
 from src.main.utility.my_sql_session import get_mysql_connection
 from src.main.utility.s3_client_object import S3ClientProvider
@@ -173,5 +178,86 @@ else:
 # before running the process
 # stage table needs to be update with status as active or inactive
 
-logger.info('**********updating the product _staging_table that we have started the process')
+logger.info('********** Updating the product_staging_table that we have started the process')
 
+db_name=config.database_name
+insert_statements=[]
+current_date=datetime.datetime.now()
+formated_date=current_date.strftime('%Y_%m_%d_%H_%M_%S')
+
+if correct_files:
+    for file in correct_files:
+
+        file_name=os.path.basename(file)
+        statement=f"""
+                   INSERT INTO {db_name}.{config.product_staging_table}
+                    (file_name,file_location ,created_date ,status)
+                    VALUES ('{file_name}','{file_name
+        }','{formated_date}','A')
+                   """
+        insert_statements.append(statement)
+    logger.info('***************** Insert statement created for SQL statement ***************')
+    print(insert_statements)
+    logger.info('********************* Connecting to MSQL database ************************')
+    conn=get_mysql_connection()
+    cursor=conn.cursor()
+    logger.info('********************* Connected  to MSQL successfully ************************')
+
+    for statement in insert_statements:
+        cursor.execute(statement)
+        conn.commit()
+    cursor.close()
+    conn.close()
+    logger.info('******************** Staging table updated successfully ************************')
+else:
+    logger.info('There is no file to process')
+    raise Exception('No data available in correct file')
+
+
+
+logger.info('************************ Fixing extra columns coming from source ***********************')
+
+# schema=StructType([
+#        StructField("customer_id", IntegerType(), True),
+#        StructField("store_id", IntegerType(), True),
+#        StructField("product_name", StringType(), True),
+#        StructField("sales_date", DateType(), True),
+#        StructField("sales_person_id", IntegerType(), True),
+#        StructField("price", FloatType(), True),
+#        StructField("quantity", IntegerType(), True),
+#        StructField("total_cost", FloatType(), True),
+#        StructField("additional_columns", StringType(), True),
+# ])
+
+# file_df_to_process=spark.createDataFrame([],schema=schema)
+# # file_df_to_process.show()
+# data = file_df_to_process.collect()
+# print(data)
+logger.info('******************** Creating empty data frame *********************')
+
+database_client=DatabaseReader(config.url,config.properties)
+final_df_to_process=database_client.create_dataframe(spark,'empty_df_create_table')
+final_df_to_process.show()
+
+for data in correct_files:
+    data_df=spark.read.format('csv')\
+                .option('header','True')\
+                .option('InferSchema','True')\
+                .load(data)
+    df_schema=data_df.columns
+
+    extra_columns=set(df_schema) - set(config.mandatory_columns)
+    logger.info(f" Extra columns present in sources are {extra_columns} ")
+    if extra_columns:
+        data_df = data_df.withColumn('additional_columns',concat_ws(',',*extra_columns))\
+            .select('customer_id','store_id','product_name','sales_date',
+                     'sales_person_id','price','quantity','total_cost','additional_columns')
+        logger.info(f' Processed {data}  and added additional columns ')
+    else:
+        data_df = data_df.withColumn('additional_columns', lit(None)) \
+            .select('customer_id', 'store_id', 'product_name', 'sales_date', 'sales_person_id', 'price', 'quantity',
+                     'total_cost', 'additional_columns')
+        logger.info(f' Processed {data}  and added additional columns ')
+    final_df_to_process=final_df_to_process.union(data_df)
+logger.info('Final dataframe from source which will be going to process')
+final_df_to_process.show()
