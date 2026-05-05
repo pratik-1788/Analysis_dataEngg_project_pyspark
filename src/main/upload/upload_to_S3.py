@@ -8,8 +8,8 @@ class UploadToS3:
         self.s3_client = s3_client
 
     def upload_to_s3(self,s3_directory,s3_bucket,local_file_path):
-        # current_epoch = datetime.datetime.now().strftime("%Y-%m-%d")
-        s3_prefix = f"{s3_directory}"
+        current_epoch = datetime.datetime.now().strftime("%Y-%m-%d")
+        s3_prefix = f"{s3_directory}/{current_epoch}/"
         try:
             for root, dirs, files in os.walk(local_file_path):
                 for file in files:

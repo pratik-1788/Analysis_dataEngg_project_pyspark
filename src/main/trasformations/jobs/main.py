@@ -10,6 +10,8 @@ from src.main.download.aws_file_download import *
 from src.main.move.move_files import move_s3_to_s3
 from src.main.read.aws_read import S3Reader
 from src.main.read.database_reader import DatabaseReader
+from src.main.trasformations.jobs.dimentions_tables_join import *
+from src.main.upload.upload_to_S3 import UploadToS3
 from src.main.utility.logging_config import logger
 from src.main.utility.my_sql_session import get_mysql_connection
 from src.main.utility.s3_client_object import S3ClientProvider
@@ -18,6 +20,7 @@ import os,sys
 from src.main.utility import encrypt_decrypt
 from resources.dev import config
 from src.main.utility.spark_session import spark_session
+from src.main.write.writeDf_into_local import WriteDfIntoLocal
 
 # **************   Get S3 client   ***************
 
@@ -261,3 +264,107 @@ for data in correct_files:
     final_df_to_process=final_df_to_process.union(data_df)
 logger.info('Final dataframe from source which will be going to process')
 final_df_to_process.show()
+
+
+logger.info('****************** Creating dataframe of Customers *****************')
+customer_table_df =database_client.create_dataframe(spark,config.customer_table_name)
+
+logger.info('****************** Creating dataframe of Product *****************')
+product_table_df =database_client.create_dataframe(spark,config.product_table)
+
+
+logger.info('****************** Creating dataframe of product_staging_table *****************')
+product_staging_table_df =database_client.create_dataframe(spark,config.product_staging_table)
+
+
+logger.info('****************** Creating dataframe of sales_team_table *****************')
+sales_team_table_df =database_client.create_dataframe(spark,config.sales_team_table)
+
+
+logger.info('****************** Creating dataframe of store_table *****************')
+store_table_df =database_client.create_dataframe(spark,config.store_table)
+
+
+s3_customer_store_sales_df_join= dimensions_table_join(final_df_to_process,customer_table_df,store_table_df,sales_team_table_df)
+
+logger.info('************************ Final enrich data ****************************')
+s3_customer_store_sales_df_join.show()
+
+# s3_customer_store_sales_df_join.write \
+#     .mode("overwrite") \
+#     .option("header", True) \
+#     .csv("file:///mnt/d/spark_test_output")
+# writeDf=WriteDfIntoLocal('overwrite','csv')
+# writeDf.write(s3_customer_store_sales_df_join,config.error_folder_path_local)
+# print('done')
+# write the data into there respective data marts in parquet formate
+# file will be written to local first
+# move the raw data to s3 bucket for reporting tool
+# write reporting data into mysql table also
+
+logger.info('****************** Writing data into customer data mart *****************')
+
+writeDf=WriteDfIntoLocal('overwrite','parquet')
+
+final_customer_data_mart_df= s3_customer_store_sales_df_join\
+                             .select('ct.customer_id','ct.first_name','ct.last_name',
+                                     'ct.address','ct.pincode','phone_number',
+                                     'sales_date','total_cost')
+writeDf.write(final_customer_data_mart_df,config.customer_data_mart_local_file)
+
+logger.info('**************** Final customer datamart ***************')
+final_customer_data_mart_df.show()
+
+logger.info(f'**************** customer data written to local disk {config.customer_data_mart_local_file} ***************')
+logger.info('****************** Moving  customer data from local to S3 *****************')
+
+s3_upload=UploadToS3(s3_client)
+message=s3_upload.upload_to_s3(config.s3_customer_datamart_directory,bucket_name,config.customer_data_mart_local_file)
+
+logger.info(message)
+
+logger.info("*************************** Writing the data into sales team data mart ******************")
+
+final_sale_team_data_mart_df=s3_customer_store_sales_df_join\
+                             .select('store_id','sales_person_id','sales_person_first_name','sales_person_last_name',
+                                     'store_manager_name','manager_id','is_manager','sales_person_address',
+                                     'sales_person_pincode','sales_date','total_cost',
+                                     expr('SUBSTRING(sales_date,1,7) as sales_month'))
+
+writeDf.write(final_sale_team_data_mart_df,config.sales_team_data_mart_local_file)
+
+
+logger.info('**************** Final sales team data mart ***************')
+final_sale_team_data_mart_df.show()
+
+logger.info(f'**************** sales team  data written to local disk {config.sales_team_data_mart_local_file} ***************')
+logger.info('****************** Moving  sales team  data from local to S3 *****************')
+
+message=s3_upload.upload_to_s3(config.s3_sales_datamart_directory,bucket_name,config.sales_team_data_mart_local_file)
+
+logger.info(message)
+
+# writing data into partition so it can optimize the query
+
+final_sale_team_data_mart_df.write.format('parquet')\
+                             .option('header','true')\
+                             .mode('overwrite')\
+                             .partitionBy('sales_month','store_id')\
+                             .save(config.sales_team_data_mart_partitioned_local_file)
+
+# Move data on s3 partition folder
+
+s3_prefix='sales_partitioned_data_mart'
+current_epoc=int(datetime.datetime.now().timestamp()) * 1000
+
+for root, dirs, files in os.walk(config.sales_team_data_mart_partitioned_local_file):
+
+    for file in files:
+        local_file_path=os.path.join(root,file)
+        relative_file_path=os.path.relpath(local_file_path,config.sales_team_data_mart_partitioned_local_file)
+        s3_key=f"{s3_prefix}/{current_epoc}/{relative_file_path}"
+        s3_client.upload_file(local_file_path,config.bucket_name,s3_key)
+
+
+
+

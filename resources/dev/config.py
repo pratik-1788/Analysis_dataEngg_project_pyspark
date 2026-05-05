@@ -18,7 +18,8 @@ s3_processed_directory = "sales_data_processed/"
 #Database credential
 # MySQL database connection properties
 database_name = "spark"
-url = f"jdbc:mysql://localhost:3306/{database_name}"
+# url = f"jdbc:mysql://10.255.255.254/"
+url = f"jdbc:mysql://172.19.176.1:3306/{database_name}"
 properties = {
     "user": "root",
     "password": "Pratik",
@@ -41,9 +42,9 @@ mandatory_columns = ["customer_id","store_id","product_name","sales_date","sales
 
 
 # File Download location
-local_directory = "D:\\Spark_Sales_data\\customer_data_mart\\file_from_s3\\"
-customer_data_mart_local_file = "D:\\Spark_Sales_data\\customer_data_mart\\customer_data_mart\\"
-sales_team_data_mart_local_file = "D:\\Spark_Sales_data\\sales_team_data_mart\\"
-sales_team_data_mart_partitioned_local_file = "D:\\Spark_Sales_data\\sales_partition_data\\sales_partition_data\\"
-error_folder_path_local = "D:\\Spark_Sales_data\\error_files\\"
-sale_data_local_directory='D:\\Spark_Sales_data\\Sales_data_to_s3\\'
+local_directory = "/mnt/d/Spark_Sales_data/customer_data_mart/file_from_s3/"
+customer_data_mart_local_file = "/mnt/d/Spark_Sales_data/customer_data_mart/customer_data_mart/"
+sales_team_data_mart_local_file = "/mnt/d/Spark_Sales_data/sales_team_data_mart/"
+sales_team_data_mart_partitioned_local_file = "/mnt/d/Spark_Sales_data/sales_partition_data/sales_partition_data/"
+error_folder_path_local = "/mnt/d/Spark_Sales_data/error_files/"
+sale_data_local_directory = "/mnt/d/Spark_Sales_data/Sales_data_to_s3/"
