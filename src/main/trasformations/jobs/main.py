@@ -5,12 +5,15 @@ from email import message
 from pyspark.resource import information
 from pyspark.sql.functions import concat_ws, lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType, FloatType
+from src.main.delete.local_file_delete import delete_local_file
 
 from src.main.download.aws_file_download import *
 from src.main.move.move_files import move_s3_to_s3
 from src.main.read.aws_read import S3Reader
 from src.main.read.database_reader import DatabaseReader
+from src.main.trasformations.jobs.customer_mart_sql_transformation_write import customer_mart_calculation_table_write
 from src.main.trasformations.jobs.dimentions_tables_join import *
+from src.main.trasformations.jobs.sales_mart_sql_transformation_write import sales_mart_sql_transformation_write
 from src.main.upload.upload_to_S3 import UploadToS3
 from src.main.utility.logging_config import logger
 from src.main.utility.my_sql_session import get_mysql_connection
@@ -367,4 +370,76 @@ for root, dirs, files in os.walk(config.sales_team_data_mart_partitioned_local_f
 
 
 
+# Calculation for customer mart
+# find out the customer total purchase every month
+# write the data into mysql
 
+logger.info('**************** Calculating customer every month purchased amount ***************')
+customer_mart_calculation_table_write(final_customer_data_mart_df)
+logger.info('**************** Calculation of customer mart done and written into the table')
+
+
+
+# calculation for sales team mart
+# find out the total sales done by each sales person every month
+# give the top performer 1 % incentive of the total sales of the month
+# rest sales person will be get nothing
+# write the data into mysql table
+logger.info('**************** Calculating sales team mart every month purchased amount ***************')
+logger.info('**************** give the top performer 1 % incentive of the total sales of the month ***************')
+sales_mart_sql_transformation_write(final_sale_team_data_mart_df)
+logger.info('**************** Calculation of sales team mart done and written into the table')
+
+
+# *********************************** Last step ***********************************
+# Move the files into processed folder and delete the local files
+
+source_prefix=config.s3_source_directory
+destination_prefix=config.s3_processed_directory
+
+message=move_s3_to_s3(s3_client,config.bucket_name,source_prefix,destination_prefix)
+logger.info(message)
+
+
+logger.info("******************************* Deleting sales data from local ****************************")
+delete_local_file(config.local_directory)
+logger.info('********* Deleted sales data from local *******************')
+
+logger.info("******************************* Deleting customer data  mart from local ****************************")
+delete_local_file(config.customer_data_mart_local_file)
+logger.info('********* Deleted sales data from local *******************')
+
+logger.info("******************************* Deleting sales team data mart from local ****************************")
+delete_local_file(config.sales_team_data_mart_local_file)
+logger.info('********* Deleted sales data from local *******************')
+
+logger.info("******************************* Deleting sales team data partition  from local ****************************")
+delete_local_file(config.sales_team_data_mart_partitioned_local_file)
+logger.info('********* Deleted sales data from local *******************')
+
+# update the status of staging table
+update_statement=[]
+
+if correct_files:
+    print(correct_files)
+    for file in correct_files:
+        filename=os.path.basename(file)
+        statement=f"""UPDATE {db_name}.{config.product_staging_table}
+                   SET status = 'I' ,updated_date='{formated_date}'
+                   WHERE file_name='{filename}'"""
+        update_statement.append(statement)
+
+    logger.info('************** Connecting with mySql *************************')
+    conn=get_mysql_connection()
+    cursor=conn.cursor()
+    logger.info('*************** Connected successfully wto MYSql')
+    for statement in update_statement:
+        cursor.execute(statement)
+        conn.commit()
+    cursor.close()
+    conn.close()
+else:
+    logger.info('************* There is some error between in process ***********************')
+    sys.exit()
+
+input('press enter to exit')
